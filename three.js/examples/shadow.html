@@ -2,6 +2,7 @@
 <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
 <!-- three.js library -->
 <script src='vendor/three.js/build/three.js'></script>
+<script src="vendor/three.js/examples/js/libs/stats.min.js"></script>
 <!-- jsartookit -->
 <script src="../vendor/jsartoolkit5/build/artoolkit.min.js"></script>
 <script src="../vendor/jsartoolkit5/js/artoolkit.api.js"></script>
@@ -9,12 +10,13 @@
 <script src="../threex-artoolkitsource.js"></script>
 <script src="../threex-artoolkitcontext.js"></script>
 <script src="../threex-armarkercontrols.js"></script>
-<script src="motionprediction/threex-motionpredictioncontrols.js"></script>
 
 <body style='margin : 0px; overflow: hidden; font-family: Monospace;'><div style='position: absolute; top: 10px; width:100%; text-align: center; z-index: 1;'>
-	<a href="https://github.com/jeromeetienne/AR.js/" target="_blank">AR.js</a> - three.js marker root
+	<a href="https://github.com/jeromeetienne/AR.js/" target="_blank">AR.js</a> - three.js mobile performance
 	<br/>
-	Contact me any time at <a href='https://twitter.com/jerome_etienne' target='_blank'>@jerome_etienne</a>
+	<br/>
+	Code by <a href="https://twitter.com/snigelpaogat" target='_blank'>Fredrik Blomqvist</a> and 
+	<a href='https://twitter.com/jerome_etienne' target='_blank'>@jerome_etienne</a>
 </div><script>
 	//////////////////////////////////////////////////////////////////////////////////
 	//		Init
@@ -22,11 +24,18 @@
 
 	// init renderer
 	var renderer	= new THREE.WebGLRenderer({
-		antialias	: true,
+		// antialias	: true,
 		alpha: true
 	});
+// renderer.shadowMap.type = THREE.BasicShadowMap
+// renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap
+renderer.shadowMap.enabled = true;
+
 	renderer.setClearColor(new THREE.Color('lightgrey'), 0)
-	renderer.setSize( 640, 480 );
+	// renderer.setPixelRatio( 1/2 );
+
+	renderer.setSize( window.innerWidth, window.innerHeight );
 	renderer.domElement.style.position = 'absolute'
 	renderer.domElement.style.top = '0px'
 	renderer.domElement.style.left = '0px'
@@ -37,6 +46,23 @@
 
 	// init scene and camera
 	var scene	= new THREE.Scene();
+
+	var ambient = new THREE.AmbientLight( 0x666666 );
+	scene.add( ambient );
+
+	var light = new THREE.DirectionalLight( 'white' );
+	light.position.set( 1, 0.3, 2 ).setLength(2)
+	light.shadow.mapSize.set(128,128)
+	light.shadow.camera.bottom = -0.6
+	light.shadow.camera.top = 0.6
+	light.shadow.camera.right = 0.6
+	light.shadow.camera.left = -0.6
+	light.castShadow = true;
+	// scene.add(new THREE.CameraHelper( light.shadow.camera ))
+	scene.add( light );
+	
+
+window.directionalLight = light
 
 	//////////////////////////////////////////////////////////////////////////////////
 	//		Initialize a basic camera
@@ -51,38 +77,42 @@
 	////////////////////////////////////////////////////////////////////////////////
 
 	var arToolkitSource = new THREEx.ArToolkitSource({
-		// to read from the webcam 
-		// sourceType : 'webcam',
-		
+		// to read from the webcam
+		sourceType : 'webcam',
+
 		// to read from an image
 		// sourceType : 'image',
-		// sourceUrl : '../../data/images/img.jpg',		
+		// sourceUrl : '../../data/images/img.jpg',
 
 		// to read from a video
-		sourceType : 'video',
-		sourceUrl : '../../data/videos/headtracking.mp4',		
+		// sourceType : 'video',
+		// sourceUrl : '../../data/videos/headtracking.mp4',
+
+		sourceWidth: 80*3,
+		sourceHeight: 60*3,
 	})
 
 	arToolkitSource.init(function onReady(){
-		console.log('source is ready')
 		// handle resize of renderer
-		arToolkitSource.onResize(renderer.domElement)		
+		arToolkitSource.onResize(renderer.domElement)
 	})
-	
+
 	// handle resize
 	window.addEventListener('resize', function(){
 		// handle arToolkitSource resize
-		arToolkitSource.onResize(renderer.domElement)		
+		arToolkitSource.onResize(renderer.domElement)
 	})
-
 	////////////////////////////////////////////////////////////////////////////////
 	//          initialize arToolkitContext
-	////////////////////////////////////////////////////////////////////////////////	
+	////////////////////////////////////////////////////////////////////////////////
+
 
 	// create atToolkitContext
 	var arToolkitContext = new THREEx.ArToolkitContext({
 		cameraParametersUrl: '../../data/data/camera_para.dat',
 		detectionMode: 'mono',
+		imageSmoothingEnabled: false,
+		maxDetectionRate: 30,
 		sourceWidth: arToolkitSource.parameters.sourceWidth,
 		sourceHeight: arToolkitSource.parameters.sourceHeight,
 	})
@@ -97,53 +127,82 @@
 		if( arToolkitSource.ready === false )	return
 
 		arToolkitContext.update( arToolkitSource.domElement )
+		
+		// update scene.visible if the marker is seen
+		scene.visible = camera.visible
 	})
-	
-	
+
+
 	////////////////////////////////////////////////////////////////////////////////
 	//          Create a ArMarkerControls
 	////////////////////////////////////////////////////////////////////////////////
-	
-	var markerRoot = new THREE.Group
-	scene.add(markerRoot)
-	var artoolkitMarker = new THREEx.ArMarkerControls(arToolkitContext, markerRoot, {
+
+	var markerControls = new THREEx.ArMarkerControls(arToolkitContext, camera, {
 		type : 'pattern',
-		// patternUrl : '../../data/data/patt.hiro',
-		patternUrl : '../../data/data/patt.kanji',
+		patternUrl : '../../data/data/patt.hiro',
+		// patternUrl : '../../data/data/patt.kanji',
+		// as we controls the camera, set changeMatrixMode: 'cameraTransformMatrix'
+		changeMatrixMode: 'cameraTransformMatrix'
 	})
+	// as we do changeMatrixMode: 'cameraTransformMatrix', start with invisible scene
+	scene.visible = false
 
 	//////////////////////////////////////////////////////////////////////////////////
 	//		add an object in the scene
 	//////////////////////////////////////////////////////////////////////////////////
 
-	// add a torus knot	
-	var geometry	= new THREE.CubeGeometry(1,1,1);
-	var material	= new THREE.MeshNormalMaterial({
-		transparent : true,
-		opacity: 0.5,
-		side: THREE.DoubleSide
-	}); 
-	var mesh	= new THREE.Mesh( geometry, material );
-	mesh.position.z	= geometry.parameters.height/2
-	markerRoot.add( mesh );
+	var markerRoot = new THREE.Group
+	scene.add(markerRoot)
 	
-	var geometry	= new THREE.TorusKnotGeometry(0.3,0.1,32,32);
-	var material	= new THREE.MeshNormalMaterial(); 
-	var mesh	= new THREE.Mesh( geometry, material );
-	mesh.position.z	= 0.5
-	markerRoot.add( mesh );
-	
-	onRenderFcts.push(function(){
-		mesh.rotation.x += 0.1
-	})
+	// add a torus knot
+	// var geometry	= new THREE.CubeGeometry(1,1,1);
+	// var material	= new THREE.MeshNormalMaterial({
+	// 	transparent : true,
+	// 	opacity: 0.5,
+	// 	side: THREE.DoubleSide
+	// });
+	// var mesh	= new THREE.Mesh( geometry, material );
+	// mesh.position.z	= geometry.parameters.height/2
+	// markerRoot.add( mesh );
+
+	;(function(){
+		var geometry	= new THREE.TorusKnotGeometry(0.3,0.1,32,32); // make it slightly larger for better view
+		var material	= new THREE.MeshNormalMaterial();
+		var material	= new THREE.MeshLambertMaterial();
+		var mesh	= new THREE.Mesh( geometry, material );
+		mesh.castShadow = true;
+		mesh.receiveShadow = true;
+		mesh.position.z	= 0.7
+		markerRoot.add( mesh );
+directionalLight.target = mesh
+
+		onRenderFcts.push(function(){
+			mesh.rotation.x += 0.04;
+		})
+
+		// add a transparent ground-plane shadow-receiver
+		var material = new THREE.ShadowMaterial();
+		material.opacity = 0.7; //! bug in threejs. can't set in constructor
+
+		var geometry = new THREE.PlaneGeometry(3, 3)
+		var planeMesh = new THREE.Mesh( geometry, material);
+		planeMesh.receiveShadow = true;
+		planeMesh.depthWrite = false;
+		markerRoot.add(planeMesh);
+window.planeMesh = planeMesh		
+	})()
+
+
 
 	//////////////////////////////////////////////////////////////////////////////////
 	//		render the whole thing on the page
 	//////////////////////////////////////////////////////////////////////////////////
-
+	var stats = new Stats();
+	document.body.appendChild( stats.dom );
 	// render the scene
 	onRenderFcts.push(function(){
 		renderer.render( scene, camera );
+		stats.update();
 	})
 
 	// run the rendering loop

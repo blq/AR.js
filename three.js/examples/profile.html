@@ -2,31 +2,44 @@
 <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
 <!-- three.js library -->
 <script src='vendor/three.js/build/three.js'></script>
+<script src="vendor/three.js/examples/js/libs/stats.min.js"></script>
 <!-- jsartookit -->
 <script src="../vendor/jsartoolkit5/build/artoolkit.min.js"></script>
 <script src="../vendor/jsartoolkit5/js/artoolkit.api.js"></script>
 <!-- include threex.artoolkit -->
 <script src="../threex-artoolkitsource.js"></script>
 <script src="../threex-artoolkitcontext.js"></script>
+<script src="../threex-artoolkitprofile.js"></script>
 <script src="../threex-armarkercontrols.js"></script>
-<script src="motionprediction/threex-motionpredictioncontrols.js"></script>
 
-<body style='margin : 0px; overflow: hidden; font-family: Monospace;'><div style='position: absolute; top: 10px; width:100%; text-align: center; z-index: 1;'>
-	<a href="https://github.com/jeromeetienne/AR.js/" target="_blank">AR.js</a> - three.js marker root
+<body style='margin : 0px; overflow: hidden; font-family: Monospace;'><div style='position: absolute; top: 10px; width:100%; text-align: center;z-index:1';>
+	<a href="https://github.com/jeromeetienne/AR.js/" target="_blank">AR.js</a> - developement playground
 	<br/>
 	Contact me any time at <a href='https://twitter.com/jerome_etienne' target='_blank'>@jerome_etienne</a>
-</div><script>
+</div>
+<div style='position: absolute;bottom: 0;right: 0;background-color: rgba(255,255,255,0.4); padding: 1em; z-index: 1;'>
+	<label title='Select the profile you like'>Profile :
+		<select id='artoolkitProfile'>
+		  <option value="desktop-normal">desktop-normal</option> 
+		  <option value="phone-normal">phone-normal</option>
+		  <option value="phone-slow">phone-slow</option>
+		  <option value="dynamic" selected>dynamic</option>
+		</select>
+	</label>
+</div>
+<script>
 	//////////////////////////////////////////////////////////////////////////////////
 	//		Init
 	//////////////////////////////////////////////////////////////////////////////////
 
 	// init renderer
 	var renderer	= new THREE.WebGLRenderer({
-		antialias	: true,
+		// antialias	: true,
 		alpha: true
 	});
 	renderer.setClearColor(new THREE.Color('lightgrey'), 0)
-	renderer.setSize( 640, 480 );
+	// renderer.setPixelRatio( 2 );
+	renderer.setSize( window.innerWidth, window.innerHeight );
 	renderer.domElement.style.position = 'absolute'
 	renderer.domElement.style.top = '0px'
 	renderer.domElement.style.left = '0px'
@@ -38,6 +51,13 @@
 	// init scene and camera
 	var scene	= new THREE.Scene();
 
+	var ambient = new THREE.AmbientLight( 0x666666 );
+	scene.add( ambient );
+
+	var directionalLight = new THREE.DirectionalLight( 0x887766 );
+	directionalLight.position.set( -1, 1, 1 ).normalize();
+	scene.add( directionalLight );
+	
 	//////////////////////////////////////////////////////////////////////////////////
 	//		Initialize a basic camera
 	//////////////////////////////////////////////////////////////////////////////////
@@ -45,26 +65,47 @@
 	// Create a camera
 	var camera = new THREE.Camera();
 	scene.add(camera);
+	
+	//////////////////////////////////////////////////////////////////////////////
+	//		handle profile ui
+	//////////////////////////////////////////////////////////////////////////////
 
-	////////////////////////////////////////////////////////////////////////////////
-	//          handle arToolkitSource
-	////////////////////////////////////////////////////////////////////////////////
+	if( localStorage.getItem('artoolkitPerformanceProfile') !== null ){
+		var domElement = document.querySelector('#artoolkitProfile')
+		domElement.value = localStorage.getItem('artoolkitPerformanceProfile')
+	}
 
-	var arToolkitSource = new THREEx.ArToolkitSource({
-		// to read from the webcam 
-		// sourceType : 'webcam',
-		
-		// to read from an image
-		// sourceType : 'image',
-		// sourceUrl : '../../data/images/img.jpg',		
-
-		// to read from a video
-		sourceType : 'video',
-		sourceUrl : '../../data/videos/headtracking.mp4',		
+	document.querySelector('#artoolkitProfile').addEventListener('change', function(){
+		var domElement = document.querySelector('#artoolkitProfile')
+		localStorage.setItem('artoolkitPerformanceProfile', domElement.value);
+		location.reload();
 	})
 
+	////////////////////////////////////////////////////////////////////////////////
+	//          handle ArToolkitProfile
+	////////////////////////////////////////////////////////////////////////////////
+
+
+	var artoolkitProfile = new THREEx.ArToolkitProfile()
+	artoolkitProfile.sourceWebcam().hiroMarker()
+	artoolkitProfile.sourceVideo('../../data/videos/headtracking.mp4').kanjiMarker();
+	// artoolkitProfile.sourceImage('../../data/images/img.jpg').hiroMarker()
+	// artoolkitProfile.performance('desktop-fast')
+	
+	if( localStorage.getItem('artoolkitPerformanceProfile') !== null ){
+		var label = localStorage.getItem('artoolkitPerformanceProfile')
+		console.log('Using stored profile', label)
+		artoolkitProfile.performance(label)
+	}
+
+
+	//////////////////////////////////////////////////////////////////////////////
+	//		handle arToolkitSource
+	//////////////////////////////////////////////////////////////////////////////
+
+	var arToolkitSource = new THREEx.ArToolkitSource(artoolkitProfile.sourceParameters)
+
 	arToolkitSource.init(function onReady(){
-		console.log('source is ready')
 		// handle resize of renderer
 		arToolkitSource.onResize(renderer.domElement)		
 	})
@@ -73,19 +114,14 @@
 	window.addEventListener('resize', function(){
 		// handle arToolkitSource resize
 		arToolkitSource.onResize(renderer.domElement)		
-	})
-
+	})	
 	////////////////////////////////////////////////////////////////////////////////
 	//          initialize arToolkitContext
-	////////////////////////////////////////////////////////////////////////////////	
+	////////////////////////////////////////////////////////////////////////////////
+	
 
 	// create atToolkitContext
-	var arToolkitContext = new THREEx.ArToolkitContext({
-		cameraParametersUrl: '../../data/data/camera_para.dat',
-		detectionMode: 'mono',
-		sourceWidth: arToolkitSource.parameters.sourceWidth,
-		sourceHeight: arToolkitSource.parameters.sourceHeight,
-	})
+	var arToolkitContext = new THREEx.ArToolkitContext(artoolkitProfile.contextParameters)
 	// initialize it
 	arToolkitContext.init(function onCompleted(){
 		// copy projection matrix to camera
@@ -106,11 +142,7 @@
 	
 	var markerRoot = new THREE.Group
 	scene.add(markerRoot)
-	var artoolkitMarker = new THREEx.ArMarkerControls(arToolkitContext, markerRoot, {
-		type : 'pattern',
-		// patternUrl : '../../data/data/patt.hiro',
-		patternUrl : '../../data/data/patt.kanji',
-	})
+	var artoolkitMarker = new THREEx.ArMarkerControls(arToolkitContext, markerRoot, artoolkitProfile.defaultMarkerParameters)
 
 	//////////////////////////////////////////////////////////////////////////////////
 	//		add an object in the scene
@@ -140,10 +172,12 @@
 	//////////////////////////////////////////////////////////////////////////////////
 	//		render the whole thing on the page
 	//////////////////////////////////////////////////////////////////////////////////
-
+	var stats = new Stats();
+	document.body.appendChild( stats.dom );
 	// render the scene
 	onRenderFcts.push(function(){
 		renderer.render( scene, camera );
+		stats.update();
 	})
 
 	// run the rendering loop

@@ -25,8 +25,14 @@ THREEx.ArToolkitContext = function(parameters){
 		
 		// enable image smoothing or not for canvas copy - default to true
 		// https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/imageSmoothingEnabled
-		imageSmoothingEnabled : parameters.imageSmoothingEnabled !== undefined ? parameters.imageSmoothingEnabled : true,
+		imageSmoothingEnabled : parameters.imageSmoothingEnabled !== undefined ? parameters.imageSmoothingEnabled : false,
 	}
+	
+	this._axistransformMatrix = new THREE.Matrix4()
+	// this._axistransformMatrix.multiply(new THREE.Matrix4().makeRotationX(Math.PI))
+	this._axistransformMatrix.multiply(new THREE.Matrix4().makeRotationY(Math.PI))
+	this._axistransformMatrix.multiply(new THREE.Matrix4().makeRotationZ(Math.PI))
+
 	
         this.arController = null;
         this._cameraParameters = null
@@ -36,6 +42,22 @@ THREEx.ArToolkitContext = function(parameters){
 THREEx.ArToolkitContext.baseURL = '../'
 THREEx.ArToolkitContext.REVISION = '1.0.1-dev'
 
+/**
+ * return the projection matrix
+ */
+THREEx.ArToolkitContext.prototype.getProjectionMatrix = function(srcElement){
+	console.assert(this.arController, 'arController MUST be initialized to call this function')
+	// get projectionMatrixArr from artoolkit
+	var projectionMatrixArr = this.arController.getCameraMatrix();
+	var projectionMatrix = new THREE.Matrix4().fromArray(projectionMatrixArr)
+		
+	// apply context._axisTransformMatrix - change artoolkit axis to match usual webgl one
+	projectionMatrix.multiply(this._axistransformMatrix)
+	
+	// return the result
+	return projectionMatrix
+}
+
 //////////////////////////////////////////////////////////////////////////////
 //		Code Separator
 //////////////////////////////////////////////////////////////////////////////
@@ -44,7 +66,7 @@ THREEx.ArToolkitContext.prototype.init = function(onCompleted){
 	var sourceWidth = this.parameters.sourceWidth
 	var sourceHeight = this.parameters.sourceHeight
 
-        console.log('ArToolkitContext: _onSourceReady width', sourceWidth, 'height', sourceHeight)
+        // console.log('ArToolkitContext: _onSourceReady width', sourceWidth, 'height', sourceHeight)
         _this._cameraParameters = new ARCameraParam(_this.parameters.cameraParametersUrl, function() {
         	// init controller
                 var arController = new ARController(sourceWidth, sourceHeight, _this._cameraParameters);

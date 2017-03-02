@@ -13,9 +13,14 @@
 <script src="../threex-armarkercontrols.js"></script>
 
 <body style='margin : 0px; overflow: hidden; font-family: Monospace;'><div style='position: absolute; top: 10px; width:100%; text-align: center;z-index:1';>
-	<a href="https://github.com/jeromeetienne/AR.js/" target="_blank">AR.js</a> - developement playground
+	<a href="https://github.com/jeromeetienne/AR.js/" target="_blank">AR.js</a> 
+	- "hole in the wall" effect 
+	- <a href='#torus' onclick='location.reload()'>torus</a>
+	or <a href='#pool' onclick='location.reload()'>pool</a>
 	<br/>
-	Contact me any time at <a href='https://twitter.com/jerome_etienne' target='_blank'>@jerome_etienne</a>
+	Concept by <a href="https://twitter.com/Saqoosha" target='_blank'>@Saqoosha</a> - 
+	Code by <a href="https://twitter.com/snigelpaogat" target='_blank'>Fredrik Blomqvist</a> and 
+	<a href='https://twitter.com/jerome_etienne' target='_blank'>@jerome_etienne</a>
 </div><script>
 	//////////////////////////////////////////////////////////////////////////////////
 	//		Init
@@ -23,7 +28,7 @@
 
 	// init renderer
 	var renderer	= new THREE.WebGLRenderer({
-		// antialias	: true,
+		antialias	: true,
 		alpha: true
 	});
 	renderer.setClearColor(new THREE.Color('lightgrey'), 0)
@@ -43,7 +48,8 @@
 	var ambient = new THREE.AmbientLight( 0x666666 );
 	scene.add( ambient );
 
-	var directionalLight = new THREE.DirectionalLight( 0x887766 );
+	var directionalLight = new THREE.DirectionalLight( 'white' );
+	directionalLight.intensity = 2
 	directionalLight.position.set( -1, 1, 1 ).normalize();
 	scene.add( directionalLight );
 	
@@ -68,8 +74,10 @@
 		// sourceUrl : '../../data/images/img.jpg',		
 
 		// to read from a video
-		sourceType : 'video',
-		sourceUrl : '../../data/videos/headtracking.mp4',		
+		// sourceType : 'video',
+		// sourceUrl : '../../data/videos/headtracking.mp4',		
+		sourceWidth: 80*4,
+		sourceHeight: 60*4,
 	})
 
 	arToolkitSource.init(function onReady(){
@@ -92,6 +100,8 @@
 	var arToolkitContext = new THREEx.ArToolkitContext({
 		cameraParametersUrl: '../../data/data/camera_para.dat',
 		detectionMode: 'mono',
+		imageSmoothingEnabled: false,
+		maxDetectionRate: 30,
 		sourceWidth: arToolkitSource.parameters.sourceWidth,
 		sourceHeight: arToolkitSource.parameters.sourceHeight,
 	})
@@ -117,40 +127,115 @@
 	scene.add(markerRoot)
 	var artoolkitMarker = new THREEx.ArMarkerControls(arToolkitContext, markerRoot, {
 		type : 'pattern',
-		// patternUrl : '../../data/data/patt.hiro',
-		patternUrl : '../../data/data/patt.kanji',
+		patternUrl : '../../data/data/patt.hiro',
+		// patternUrl : '../../data/data/patt.kanji',
 	})
 
 	//////////////////////////////////////////////////////////////////////////////////
 	//		add an object in the scene
 	//////////////////////////////////////////////////////////////////////////////////
 
-	// add a torus knot	
-	var geometry	= new THREE.CubeGeometry(1,1,1);
-	var material	= new THREE.MeshNormalMaterial({
-		transparent : true,
-		opacity: 0.5,
-		side: THREE.DoubleSide
-	}); 
-	var mesh	= new THREE.Mesh( geometry, material );
-	mesh.position.z	= geometry.parameters.height/2
-	markerRoot.add( mesh );
-	
-	var geometry	= new THREE.TorusKnotGeometry(0.3,0.1,32,32);
-	var material	= new THREE.MeshNormalMaterial(); 
-	var mesh	= new THREE.Mesh( geometry, material );
-	mesh.position.z	= 0.5
-	markerRoot.add( mesh );
-	
-	onRenderFcts.push(function(){
-		mesh.rotation.x += 0.1
+	var group = new THREE.Group
+	group.scale.set(1,1,1).multiplyScalar(1.2)
+	group.position.z	= -0.5 * group.scale.x
+
+	markerRoot.add(group)
+
+
+	//////////////////////////////////////////////////////////////////////////////
+	//		init invisibility cloak
+	//////////////////////////////////////////////////////////////////////////////
+	// add outter cube - invisibility cloak
+	var geometry = new THREE.BoxGeometry(1,1,1);
+	geometry.faces.splice(8, 2); // make hole by removing top two triangles (is this assumption stable?)
+	var material = new THREE.MeshBasicMaterial({
+		colorWrite: false // only write to z-buf
 	})
+	// an alternative to reach the same visual - this one seems way slower tho. My guess is it is hitting a slow-path in gpu
+	// var material   = new THREE.MeshBasicMaterial();
+	// material.color.set('black')
+	// material.opacity   = 0;
+	// material.blending  = THREE.NoBlending;	
+
+	var mesh = new THREE.Mesh( geometry, material);
+	mesh.scale.set(1,1,1).multiplyScalar(1.02)
+	group.add(mesh)
+
+	
+	var label = location.hash.substring(1) || 'pool'
+	if( label === 'torus' ){
+		initInnerCubeTorus()
+	}else if( label === 'pool' ){
+		initInnerCubePool()
+	}else{
+		console.assert(false)
+	}
+
+
+	function initInnerCubeTorus(){
+		// add the inner box
+		var geometry	= new THREE.BoxGeometry(1,1,1);
+		var material	= new THREE.MeshNormalMaterial({
+			side: THREE.BackSide
+		}); 
+		var mesh	= new THREE.Mesh( geometry, material );
+		group.add( mesh );
+
+		// add the torus knot
+		var geometry	= new THREE.TorusKnotGeometry(0.25,0.1,32,32);
+		var material	= new THREE.MeshNormalMaterial(); 
+		var mesh	= new THREE.Mesh( geometry, material );
+		group.add( mesh );
+		
+		onRenderFcts.push(function(){
+			mesh.rotation.x += 0.1
+		})	
+	}
+
+	function initInnerCubePool(){
+		// todo: should build geometry explicitly instead,
+		// more like a hat, i.e including a brim around the top
+		var innerGeom = new THREE.BoxGeometry(1,1,1);
+		innerGeom.faces.splice(8, 2); // remove top (though this is a backside material)
+		innerGeom.elementsNeedUpdate = true;
+		var mesh = new THREE.Mesh(innerGeom, new THREE.MeshPhongMaterial({
+			side: THREE.BackSide,
+			map: new THREE.TextureLoader().load('images/mosaic-256x256.jpg')
+		}));
+		// TODO fix uv
+		group.add(mesh)
+
+		var geometry = new THREE.PlaneGeometry(1, 1)
+		var material = new THREE.MeshPhongMaterial({
+			transparent: true,
+			opacity: 0.5,
+			map: new THREE.TextureLoader().load('images/water.jpg')
+		})
+		var mesh = new THREE.Mesh(geometry, material);
+		mesh.position.z = 0.4;
+		group.add(mesh)
+
+
+		var geometry	= new THREE.SphereGeometry(0.1)
+		var texture	= THREE.ImageUtils.loadTexture('images/BeachBallColor.jpg')
+		var material	= new THREE.MeshBasicMaterial({
+			map	: texture,
+			bumpMap	: texture,
+			bumpScale: 0.01,
+		})
+		var material = new THREE.MeshNormalMaterial()
+		var mesh	= new THREE.Mesh( geometry, material );
+		mesh.position.z = 0.35;
+		mesh.position.x = innerGeom.parameters.height*0.12;
+		group.add(mesh);
+	}
+
 
 	//////////////////////////////////////////////////////////////////////////////////
 	//		render the whole thing on the page
 	//////////////////////////////////////////////////////////////////////////////////
 	var stats = new Stats();
-	document.body.appendChild( stats.dom );
+	// document.body.appendChild( stats.dom );
 	// render the scene
 	onRenderFcts.push(function(){
 		renderer.render( scene, camera );
